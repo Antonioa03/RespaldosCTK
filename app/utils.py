@@ -21,43 +21,38 @@ def convertir_tamano(bytes):
         bytes /= 1024
 
 def comparar_origen_destino(origen, destino, elementos_seleccionados=None):
-    """Compara archivos y carpetas entre origen y destino y devuelve los que son nuevos o diferentes."""
+    """Compara carpetas entre origen y destino y devuelve las que son nuevas o diferentes."""
     elementos_a_copiar = []
 
-    for root, dirs, files in os.walk(origen):
-        ruta_relativa = os.path.relpath(root, origen)
-        destino_actual = os.path.join(destino, ruta_relativa)
+    for elemento in elementos_seleccionados:
+        ruta_origen = os.path.join(origen, elemento)
+        ruta_destino = os.path.join(destino, elemento)
 
-        # Verificar si esta carpeta está en la lista de seleccionados
-        if elementos_seleccionados and ruta_relativa != "." and ruta_relativa not in elementos_seleccionados:
-            # Verificar si alguna subcarpeta o archivo está seleccionado
-            es_padre_de_seleccionado = False
-            for elem in elementos_seleccionados:
-                if elem.startswith(ruta_relativa + os.sep):
-                    es_padre_de_seleccionado = True
-                    break
-            
-            if not es_padre_de_seleccionado:
-                continue  # Saltar esta carpeta si no está seleccionada
-
-        if not os.path.exists(destino_actual):
-            elementos_a_copiar.append((ruta_relativa, '[CARPETA]', 0))
-
-        for file in files:
-            archivo_relativo = os.path.join(ruta_relativa, file)
-            if elementos_seleccionados and archivo_relativo not in elementos_seleccionados:
-                continue  # Saltar este archivo si no está seleccionado
+        # Verificar si es una carpeta
+        if os.path.isdir(ruta_origen):
+            if not os.path.exists(ruta_destino):
+                elementos_a_copiar.append((elemento, '[CARPETA]', 0))
+            else:
+                # Para carpetas, comparamos el contenido total
+                tamano_origen = calcular_tamano_carpeta(ruta_origen)
+                tamano_destino = calcular_tamano_carpeta(ruta_destino)
                 
-            ruta_origen = os.path.join(root, file)
-            ruta_destino = os.path.join(destino_actual, file)
-
-            meta_origen = obtener_metadatos(ruta_origen)
-            meta_destino = obtener_metadatos(ruta_destino)
-
-            if meta_destino is None or meta_origen != meta_destino:
-                elementos_a_copiar.append((archivo_relativo, '[ARCHIVO]', meta_origen[0]))
-
+                if tamano_origen != tamano_destino:
+                    elementos_a_copiar.append((elemento, '[CARPETA]', tamano_origen))
+                    
     return elementos_a_copiar
+
+def calcular_tamano_carpeta(ruta):
+    """Calcula el tamaño total de una carpeta incluyendo todos sus archivos."""
+    tamano_total = 0
+    for dirpath, dirnames, filenames in os.walk(ruta):
+        for f in filenames:
+            try:
+                fp = os.path.join(dirpath, f)
+                tamano_total += os.path.getsize(fp)
+            except OSError:
+                pass  # Ignorar archivos a los que no se puede acceder
+    return tamano_total
 
 def obtener_arbol_con_tamanos_nivel_2(base_path):
     """Genera un árbol de archivos con el tamaño total de cada carpeta hasta el nivel 2."""

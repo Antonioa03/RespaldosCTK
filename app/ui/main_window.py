@@ -246,19 +246,24 @@ class PyRespaldosApp(ctk.CTk):
                 if ruta_relativa != ".":  # No mostrar la carpeta raíz
                     nivel = ruta_relativa.count(os.sep)
                     estructura.append((ruta_relativa, True, 0, nivel))
-            
-            # Luego todos los archivos
-            for root, dirs, files in os.walk(self.ruta_origen):
-                ruta_relativa = os.path.relpath(root, self.ruta_origen)
+                
+                # Calcular tamaño total de la carpeta (sin mostrar archivos individuales)
+                tamano_carpeta = 0
                 for file in files:
                     try:
                         ruta_archivo = os.path.join(root, file)
                         tamano = os.path.getsize(ruta_archivo) if os.path.exists(ruta_archivo) else 0
-                        nivel = ruta_relativa.count(os.sep) + 1
-                        estructura.append((os.path.join(ruta_relativa, file), False, tamano, nivel))
-                        tamano_total += tamano
+                        tamano_carpeta += tamano
                     except Exception as e:
                         print(f"Error al obtener tamaño de {ruta_archivo}: {e}")
+                
+                # Solo agregamos tamaño a la carpeta, no a los archivos individuales
+                if ruta_relativa != ".":
+                    for i in range(len(estructura)):
+                        if estructura[i][0] == ruta_relativa:
+                            estructura[i] = (ruta_relativa, True, tamano_carpeta, nivel)
+                
+                tamano_total += tamano_carpeta
             
             # Actualizar la interfaz en el hilo principal
             self.after(0, lambda: self._mostrar_estructura(estructura, tamano_total))
