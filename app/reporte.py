@@ -8,8 +8,22 @@ import os
 import datetime
 from app.utils import convertir_tamano, obtener_arbol_con_tamanos_nivel_2
 
-def generar_reporte_html(origen, destino, archivos_copiados):
-    """Genera un informe HTML con los archivos copiados, comparación de tamaños y árboles de archivos hasta el nivel 2."""
+def generar_reporte_html(origen, destino, archivos_copiados, tamaño_destino_antes=0, tamaño_destino_despues=0, tamaño_diferencia=0):
+    """
+    Genera un informe HTML con los archivos copiados y estadísticas de tamaño.
+    
+    Args:
+        origen: Ruta de origen
+        destino: Ruta de destino
+        archivos_copiados: Lista de archivos copiados en formato (ruta, tipo, tamaño)
+        tamaño_destino_antes: Tamaño del directorio destino antes de la copia
+        tamaño_destino_despues: Tamaño del directorio destino después de la copia
+        tamaño_diferencia: Diferencia de tamaño (después - antes)
+    
+    Returns:
+        Ruta al archivo HTML generado
+    """
+    # Obtener información de la estructura del origen y destino
     arbol_origen = obtener_arbol_con_tamanos_nivel_2(origen)
     arbol_destino = obtener_arbol_con_tamanos_nivel_2(destino)
     fecha = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
@@ -42,6 +56,13 @@ def generar_reporte_html(origen, destino, archivos_copiados):
                 margin: 20px 0;
             }}
             .total {{ font-weight: bold; }}
+            .comparison {{ 
+                background-color: #e3f2fd; 
+                border: 1px solid #90caf9; 
+                padding: 15px; 
+                border-radius: 5px;
+                margin: 20px 0;
+            }}
         </style>
     </head>
     <body>
@@ -53,7 +74,14 @@ def generar_reporte_html(origen, destino, archivos_copiados):
             <p><span class="total">Carpeta destino:</span> {destino}</p>
             <p><span class="total">Total de Archivos:</span> {total_archivos}</p>
             <p><span class="total">Total de Carpetas:</span> {total_carpetas}</p>
-            <p><span class="total">Tamaño Total:</span> {convertir_tamano(total_tamano)}</p>
+            <p><span class="total">Tamaño Total Copiado:</span> {convertir_tamano(total_tamano)}</p>
+        </div>
+        
+        <div class="comparison">
+            <h2>Comparación de Tamaño Antes y Después</h2>
+            <p><span class="total">Tamaño del destino antes de la copia:</span> {convertir_tamano(tamaño_destino_antes)}</p>
+            <p><span class="total">Tamaño del destino después de la copia:</span> {convertir_tamano(tamaño_destino_despues)}</p>
+            <p><span class="total">Diferencia de tamaño:</span> {convertir_tamano(tamaño_diferencia)}</p>
         </div>
         
         <h2>Archivos Copiados</h2>
@@ -64,12 +92,6 @@ def generar_reporte_html(origen, destino, archivos_copiados):
                 <td colspan="2">Total</td>
                 <td>{convertir_tamano(total_tamano)}</td>
             </tr>
-        </table>
-        
-        <h2>Comparación de Tamaño de Carpeta</h2>
-        <table border='1'>
-            <tr><th>Carpeta</th><th>Tamaño en Origen</th><th>Tamaño en Destino</th></tr>
-            {''.join(f'<tr><td>{carp}</td><td>{convertir_tamano(arbol_origen.get(carp, 0))}</td><td>{convertir_tamano(arbol_destino.get(carp, 0))}</td></tr>' for carp in set(arbol_origen) | set(arbol_destino))}
         </table>
         
         <h2>Árbol de Archivos en Origen</h2>

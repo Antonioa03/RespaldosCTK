@@ -316,6 +316,9 @@ class PyRespaldosApp(ctk.CTk):
             messagebox.showinfo("Información", "No hay elementos nuevos o modificados que necesiten ser copiados")
             return
             
+        # Calcular tamaño antes de la copia - Guardamos esta información para el informe
+        tamaño_destino_antes = self.calcular_tamaño_directorio(self.ruta_destino)
+        
         # Mostrar confirmación con resumen
         texto_confirmacion = "Se copiarán los siguientes elementos:\n\n"
         texto_confirmacion += f"Total: {len(elementos_a_copiar)} elementos\n"
@@ -339,9 +342,23 @@ class PyRespaldosApp(ctk.CTk):
         self.btn_copiar.configure(state="disabled")
         
         # Iniciar la copia en un hilo separado
-        threading.Thread(target=self._copiar_en_hilo, args=(elementos_seleccionados, elementos_a_copiar), daemon=True).start()
+        threading.Thread(target=self._copiar_en_hilo, 
+                         args=(elementos_seleccionados, elementos_a_copiar, tamaño_destino_antes), 
+                         daemon=True).start()
+    
+    def calcular_tamaño_directorio(self, ruta):
+        """Calcula el tamaño total de un directorio"""
+        tamaño_total = 0
+        for dirpath, dirnames, filenames in os.walk(ruta):
+            for f in filenames:
+                fp = os.path.join(dirpath, f)
+                try:
+                    tamaño_total += os.path.getsize(fp)
+                except OSError:
+                    pass  # Ignorar archivos que no se pueden acceder
+        return tamaño_total
 
-    def _copiar_en_hilo(self, elementos_seleccionados, elementos_a_copiar):
+    def _copiar_en_hilo(self, elementos_seleccionados, elementos_a_copiar, tamaño_destino_antes):
         """Realiza la copia en un hilo separado"""
         try:
             # Actualizar estado
@@ -349,7 +366,7 @@ class PyRespaldosApp(ctk.CTk):
             self.after(0, lambda: self.barra_progreso.set(0.05))
             
             # Variable para controlar si se usará robocopy o copia manual
-            usar_robocopy = True
+            usar_robocopy = False  # Cambiamos a False por defecto para usar el método manual
             elementos_copiados = []
             
             if usar_robocopy:
@@ -404,24 +421,46 @@ class PyRespaldosApp(ctk.CTk):
                     self.ruta_origen, self.ruta_destino, elementos_seleccionados, actualizar_progreso
                 )
             
-            # Generar informe
-            self.after(0, lambda: self.label_estado.configure(text="Generando informe..."))
-            self.after(0, lambda: self.barra_progreso.set(0.95))
+            # Calcular tamaño después de la copia
+            self.after(0, lambda: self.label_estado.configure(text="Calculando tamaño total..."))
+            tamaño_destino_despues = self.calcular_tamaño_directorio(self.ruta_destino)
+            tamaño_diferencia = tamaño_destino_despues - tamaño_destino_antes
             
-            informe = generar_reporte_html(self.ruta_origen, self.ruta_destino, elementos_copiados)
-            
-            # Completado
-            self.after(0, lambda: self.barra_progreso.set(0.98))
+            # Preparamos los datos necesarios para el informe pero no lo generamos todavía
+            datos_informe = {
+                'origen': self.ruta_origen,
+                'destino': self.ruta_destino,
+                'elementos_copiados': elementos_copiados,
+                'tamaño_destino_antes': tamaño_destino_antes,
+                'tamaño_destino_despues': tamaño_destino_despues,
+                'tamaño_diferencia': tamaño_diferencia
+            }
             
             # Enviar informe por correo si está habilitado
             if self.var_enviar_correo.get():
-                self.after(0, lambda: self.label_estado.configure(text="Enviando informe por correo..."))
+                self.after(0, lambda: self.label_estado.configure(text="Preparando envío de correo..."))
+                self.after(0, lambda: self.barra_progreso.set(0.9))
                 
                 correo = self.entry_email.get().strip()
                 password = self.entry_password.get().strip()
                 destinatario = self.entry_destinatario.get().strip()
                 servidor = self.entry_smtp.get().strip()
                 puerto = self.entry_puerto.get().strip()
+                
+                # Ahora generamos el informe HTML después de todo el proceso
+                self.after(0, lambda: self.label_estado.configure(text="Generando informe HTML..."))
+                self.after(0, lambda: self.barra_progreso.set(0.95))
+                
+                informe = generar_reporte_html(
+                    datos_informe['origen'],
+                    datos_informe['destino'],
+                    datos_informe['elementos_copiados'],
+                    datos_informe['tamaño_destino_antes'],
+                    datos_informe['tamaño_destino_despues'],
+                    datos_informe['tamaño_diferencia']
+                )
+                
+                self.after(0, lambda: self.label_estado.configure(text="Enviando informe por correo..."))
                 
                 exito, mensaje = enviar_informe_por_correo(
                     informe, correo, password, destinatario, servidor, puerto, 
@@ -435,9 +474,36 @@ class PyRespaldosApp(ctk.CTk):
                     self.after(0, lambda: self.label_estado.configure(text=f"Copia completada. Informe guardado en: {informe}. Error al enviar por correo."))
                     mensaje_final = f"Copia finalizada con éxito.\nSe ha generado un informe: {informe}\nNo se pudo enviar el informe por correo: {mensaje}"
             else:
+                # Si no enviamos correo, generamos el informe al final
+                self.after(0, lambda: self.label_estado.configure(text="Generando informe HTML..."))
+                self.after(0, lambda: self.barra_progreso.set(0.95))
+                
+                informe = generar_reporte_html(
+                    datos_informe['origen'],
+                    datos_informe['destino'],
+                    datos_informe['elementos_copiados'],
+                    datos_informe['tamaño_destino_antes'],
+                    datos_informe['tamaño_destino_despues'],
+                    datos_informe['tamaño_diferencia']
+                )
+                
                 self.after(0, lambda: self.label_estado.configure(text=f"Copia completada. Informe guardado en: {informe}"))
                 mensaje_final = f"Copia finalizada con éxito.\nSe ha generado un informe: {informe}"
             
+            self.after(0, lambda: self.barra_progreso.set(1.0))
+            self.after(0, lambda: self.btn_copiar.configure(state="normal"))
+            self.after(0, lambda: messagebox.showinfo("Operación completada", mensaje_final))
+            
+            # Intentar abrir el informe
+            try:
+                os.startfile(informe)
+            except Exception as e:
+                print(f"No se pudo abrir el informe: {e}")
+                
+        except Exception as e:
+            self.after(0, lambda: messagebox.showerror("Error", f"Error durante la copia: {e}"))
+            self.after(0, lambda: self.label_estado.configure(text=f"Error: {str(e)}"))
+            self.after(0, lambda: self.btn_copiar.configure(state="normal"))
             self.after(0, lambda: self.barra_progreso.set(1.0))
             self.after(0, lambda: self.btn_copiar.configure(state="normal"))
             self.after(0, lambda: messagebox.showinfo("Operación completada", mensaje_final))

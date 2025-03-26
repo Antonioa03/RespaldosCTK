@@ -44,11 +44,14 @@ def copiar_con_robocopy(origen, destino, elementos_seleccionados, opciones_adici
                 elemento_formateado = elemento.replace("/", "\\")
                 f.write(f"{elemento_formateado}\n")
         
-        # Opciones base
+        # Opciones base - Incluir /E para incluir subcarpetas
         opciones = f"/E {opciones_adicionales}"
         
-        # Comando Robocopy
-        comando = f'robocopy "{origen}" "{destino}" {opciones} /XA:SH /XD "$RECYCLE.BIN" "System Volume Information" /IF @{archivo_inclusion}'
+        # Comando Robocopy modificado para copiar correctamente
+        # En lugar de usar /IF, usamos simplemente el comando básico de Robocopy
+        comando = f'robocopy "{origen}" "{destino}" {opciones} /XA:SH /XD "$RECYCLE.BIN" "System Volume Information"'
+        
+        print(f"Ejecutando comando: {comando}")
         
         # Ejecutar Robocopy
         proceso = subprocess.Popen(comando, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, bufsize=1, universal_newlines=True)
@@ -58,6 +61,7 @@ def copiar_con_robocopy(origen, destino, elementos_seleccionados, opciones_adici
         
         for linea in proceso.stdout:
             output_log.append(linea.strip())
+            print(linea.strip())  # Para depuración
         
         # Esperar a que termine el proceso y obtener el código de salida
         codigo_salida = proceso.wait()
@@ -104,11 +108,52 @@ def copiar_archivos_manualmente(origen, destino, elementos_seleccionados, callba
                 if not os.path.exists(ruta_destino_completa):
                     os.makedirs(ruta_destino_completa, exist_ok=True)
                 elementos_copiados.append((ruta, '[CARPETA]', 0))
+                
+                # Para cada carpeta, también necesitamos recorrer sus archivos y copiarlos
+                for root, dirs, files in os.walk(ruta_origen_completa):
+                    # Calcular la ruta relativa desde la carpeta origen principal
+                    rel_path = os.path.relpath(root, origen)
+                    
+                    # Crear carpeta destino correspondiente
+                    dest_dir = os.path.join(destino, rel_path)
+                    if not os.path.exists(dest_dir):
+                        os.makedirs(dest_dir, exist_ok=True)
+                    
+                    # Copiar cada archivo en esta carpeta
+                    for file in files:
+                        src_file = os.path.join(root, file)
+                        dst_file = os.path.join(dest_dir, file)
+                        
+                        try:
+                            # Verificar si el archivo ya existe y comparar tamaños
+                            if not os.path.exists(dst_file) or os.path.getsize(src_file) != os.path.getsize(dst_file):
+                                # Crear directorio si no existe
+                                os.makedirs(os.path.dirname(dst_file), exist_ok=True)
+                                
+                                # Copiar archivo
+                                with open(src_file, 'rb') as fsrc:
+                                    with open(dst_file, 'wb') as fdst:
+                                        fdst.write(fsrc.read())
+                                
+                                # Registrar archivo copiado
+                                rel_file_path = os.path.join(rel_path, file)
+                                tamaño = os.path.getsize(src_file)
+                                elementos_copiados.append((rel_file_path, '[ARCHIVO]', tamaño))
+                        except Exception as e:
+                            print(f"Error al copiar archivo {src_file}: {e}")
+                
             elif os.path.isfile(ruta_origen_completa):
                 # Es un archivo
-                tamano = os.path.getsize(ruta_origen_completa)
-                copiar_archivo_manual(ruta_origen_completa, ruta_destino_completa)
+                # Asegurar que el directorio destino existe
+                os.makedirs(os.path.dirname(ruta_destino_completa), exist_ok=True)
+                
+                # Copiar archivo
+                with open(ruta_origen_completa, 'rb') as fsrc:
+                    tamano = os.path.getsize(ruta_origen_completa)
+                    with open(ruta_destino_completa, 'wb') as fdst:
+                        fdst.write(fsrc.read())
                 elementos_copiados.append((ruta, '[ARCHIVO]', tamano))
+        
         except Exception as e:
             print(f"Error al copiar {ruta}: {e}")
     
